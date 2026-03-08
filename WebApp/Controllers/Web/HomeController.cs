@@ -1,8 +1,9 @@
-using System.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
 using WebApp.Presentation.ViewModels;
 
-namespace WebApplication1.Controllers
+namespace WebApp.Controllers.Web
 {
     public class HomeController : Controller
     {

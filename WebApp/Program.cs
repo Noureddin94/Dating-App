@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using WebApp.Infrastructure.Infrastructure.Data;
 
 namespace WebApplication1
 {
@@ -8,13 +11,31 @@ namespace WebApplication1
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            builder.Services.AddDbContext<AppDbContext>(options =>
+                {
+                    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+                });
+            builder.Services.AddAuthorization();
+            builder.Services
+                .AddDefaultIdentity<IdentityUser>()
+                .AddEntityFrameworkStores<AppDbContext>();
+
+            builder.Services.AddControllersWithViews();
+            builder.Services.AddRazorPages();
+
             builder.Services.AddControllersWithViews();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
             var app = builder.Build();
+            app.UseCors(policy =>
+            {
+                policy.AllowAnyOrigin()
+                      .AllowAnyMethod()
+                      .AllowAnyHeader();
+            });
 
-            // Always enable Swagger (or guard with IsDevelopment() — NOT the inverse)
+            // Always enable Swagger (or guard with IsDevelopment() ï¿½ NOT the inverse)
             app.UseSwagger();
             app.UseSwaggerUI(options =>
             {
@@ -32,18 +53,19 @@ namespace WebApplication1
                 app.UseDeveloperExceptionPage();
             }
 
+            app.MapIdentityApi<IdentityUser>();
             app.UseHttpsRedirection();
             app.UseStaticFiles();
             app.UseRouting();
+            app.UseAuthentication();
             app.UseAuthorization();
 
-            // Single route mapping — remove the duplicate
+            // Single route mapping ï¿½ remove the duplicate
             app.MapControllerRoute(
                 name: "default",
                 pattern: "{controller=Home}/{action=Index}/{id?}");
-
-            app.MapControllers();
-
+            app.MapRazorPages();
+            //app.MapControllers();
             app.Run();
         }
     }
