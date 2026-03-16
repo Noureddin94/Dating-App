@@ -1,6 +1,7 @@
-using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 using WebApp.Infrastructure.Infrastructure.Data;
 
 namespace WebApplication1
@@ -16,16 +17,57 @@ namespace WebApplication1
                     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
                 });
             builder.Services.AddAuthorization();
-            builder.Services
-                .AddDefaultIdentity<IdentityUser>()
-                .AddEntityFrameworkStores<AppDbContext>();
 
             builder.Services.AddControllersWithViews();
             builder.Services.AddRazorPages();
 
-            builder.Services.AddControllersWithViews();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services
+                .AddIdentityApiEndpoints<IdentityUser>()
+                .AddEntityFrameworkStores<AppDbContext>();
+
+            builder.Services.AddAuthentication();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme,
+                    new OpenApiSecurityScheme
+                    {
+                        Name = "Authorization",
+                        Description = "JWT Authorization header using Bearer scheme",
+                        In = ParameterLocation.Header,
+                        Type = SecuritySchemeType.Http,
+                        Scheme = "Bearer",
+                        BearerFormat = "JWT"
+                    });
+
+                options.AddSecurityRequirement(new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            BearerFormat = "JWT",
+                            Reference = new OpenApiReference 
+                            {
+                                Type = ReferenceType.SecurityScheme,
+                                Id = JwtBearerDefaults.AuthenticationScheme
+                            }
+                        },
+                        Array.Empty<string>()
+                    }
+                });
+
+                options.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Version = "v1",
+                    Title = "My API",
+                    Description = "A simple ASP.NET Core Web API",
+                    Contact = new OpenApiContact
+                    {
+                        Name = "Test",
+                        Email = "test@test.nl"
+                    }
+                });
+            });
 
             var app = builder.Build();
             app.UseCors(policy =>
