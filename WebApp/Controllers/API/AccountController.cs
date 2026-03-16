@@ -38,12 +38,11 @@ namespace WebApp.Controllers.API
                 return NotFound("User not found.");
             }
 
-            var userProfile = new User
+            var userProfile = new UserProfile
             {
-                Id = int.TryParse(currentUser.Id, out var parsedId) ? parsedId : 0,
-                Name = currentUser.UserName ?? "",
-                Email = currentUser.Email ?? "",
-                PhoneNumber = currentUser.PhoneNumber ?? "",
+                UserId = Guid.NewGuid().ToString(),
+                FirstName = currentUser.UserName ?? "",
+                LastName = currentUser.UserName ?? "",
             };
 
             return Ok(userProfile);

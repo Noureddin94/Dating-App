@@ -8,14 +8,15 @@ public class UserTest
     public void User_ShouldStoreNameCorrectly()
     {
         // Arrange
-        var user = new User()
+        var user = new UserProfile()
         {
-           Name = "Alice",
-           Email = "alice@example.com"
+            UserId = Guid.NewGuid().ToString(),
+            FirstName = "Alice",
+            LastName = "Smith"
         };
 
         // Act
-        var result = user.Name;
+        var result = user.FirstName;
 
         // Assert
         Assert.Equal("Alice", result);
