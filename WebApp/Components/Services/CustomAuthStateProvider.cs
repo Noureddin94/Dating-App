@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Components.Authorization;
 using System.Security.Claims;
 
-namespace WebApp.Services
+namespace WebApp.Components.Services
 {
     public class CustomAuthStateProvider : AuthenticationStateProvider
     {

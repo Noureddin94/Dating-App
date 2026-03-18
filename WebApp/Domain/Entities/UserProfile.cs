@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Identity;
-using WebApp.Domain.Entities;
 using WebApp.Domain.Enums;
+using WebApp.Infrastructure.Domain.Entities;
 
-namespace WebApp.Infrastructure.Domain.Entities
+namespace WebApp.Domain.Entities
 {
     public class UserProfile : BaseEntity
     {
