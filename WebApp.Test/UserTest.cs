@@ -1,4 +1,4 @@
-﻿using WebApp.Infrastructure.Domain.Entities;
+﻿using WebApp.Domain.Entities;
 
 namespace WebApp.Test;
 

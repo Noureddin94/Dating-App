@@ -1,33 +1,61 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
-using WebApp.Infrastructure.Infrastructure.Data;
+using WebApp.Application.Services;
 using WebApp.Components;
+using WebApp.Components.Services;
+using WebApp.Domain.Interfaces;
+using WebApp.Domain.Seeders;
+using WebApp.Infrastructure.Domain.Interfaces;
+using WebApp.Infrastructure.Infrastructure.Data;
+using WebApp.Infrastructure.Repositories;
 
 namespace WebApp;
 
 public class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
 
         // ── Database ──────────────────────────────────────────────────────────
         builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(
-                builder.Configuration.GetConnectionString("DefaultConnection"),
-                sqlOptions => sqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "dbo")
-                ));
+        options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlOptions => sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null)));
 
         // ── Identity ──────────────────────────────────────────────────────────
         builder.Services
             .AddIdentityApiEndpoints<IdentityUser>()
+            .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<AppDbContext>();
 
         // ── Auth ──────────────────────────────────────────────────────────────
         builder.Services.AddAuthentication();
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy("AdminOnly", policy =>
+                policy.RequireRole("Admin"));
+            options.AddPolicy("ApprovedUser", policy =>
+                policy.RequireRole("ApprovedUser", "Admin"));
+        });
+
+        // ── Repository ────────────────────────────────────────────────────────
+        builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+
+        // ── Application Services ──────────────────────────────────────────────
+        builder.Services.AddScoped<IProfileService, ProfileService>();
+        builder.Services.AddScoped<ILikeService, LikeService>();
+        builder.Services.AddScoped<IMatchService, MatchService>();
+        builder.Services.AddScoped<IGameService, GameService>();
+        builder.Services.AddScoped<IMessageService, MessageService>();
+        builder.Services.AddScoped<IModerationService, ModerationService>();
+        builder.Services.AddScoped<IAdminService, AdminService>();
 
         // ── MVC + Razor Pages ─────────────────────────────────────────────────
         builder.Services.AddControllersWithViews();
@@ -37,6 +65,8 @@ public class Program
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
+        builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
+        
         // ── SignalR ───────────────────────────────────────────────────────────
         builder.Services.AddSignalR();
 
@@ -54,7 +84,6 @@ public class Program
                     Scheme = "Bearer",
                     BearerFormat = "JWT"
                 });
-
             options.AddSecurityRequirement(new OpenApiSecurityRequirement
             {
                 {
@@ -70,7 +99,6 @@ public class Program
                     Array.Empty<string>()
                 }
             });
-
             options.SwaggerDoc("v1", new OpenApiInfo
             {
                 Version = "v1",
@@ -87,19 +115,16 @@ public class Program
                 policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
         });
 
-        // ─────────────────────────────────────────────────────────────────────
         var app = builder.Build();
-        // ─────────────────────────────────────────────────────────────────────
+        Console.WriteLine($">>> Using connection: {app.Configuration.GetConnectionString("DefaultConnection")}");
 
         app.UseCors();
+        app.UseSwagger();
+        app.UseSwaggerUI(o =>
+            o.SwaggerEndpoint("/swagger/v1/swagger.json", "Dating App API v1"));
 
         if (app.Environment.IsDevelopment())
-        {
             app.UseDeveloperExceptionPage();
-            app.UseSwagger();
-            app.UseSwaggerUI(o =>
-                o.SwaggerEndpoint("/swagger/v1/swagger.json", "Dating App API v1"));
-        }
         else
         {
             app.UseExceptionHandler("/Home/Error");
@@ -113,24 +138,38 @@ public class Program
         app.UseAuthorization();
         app.UseAntiforgery();
 
-        // Identity minimal API (/register, /login, /logout, etc.)
         app.MapIdentityApi<IdentityUser>();
-
-        // MVC controllers
-        app.MapControllerRoute(
-            name: "default",
-            pattern: "{controller=Home}/{action=Index}/{id?}");
-
-        // Razor Pages (Identity scaffolded UI under /Identity/Account/...)
+        app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
         app.MapRazorPages();
+        app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
-        // Blazor Server — maps /_blazor hub and serves App.razor as the root
-        app.MapRazorComponents<App>()
-            .AddInteractiveServerRenderMode();
-
-        // SignalR hubs — uncomment as you add them
+        // uncomment when SignalR hubs are built:
         // app.MapHub<ChatHub>("/hubs/chat");
         // app.MapHub<GameHub>("/hubs/game");
+        // app.MapHub<NotificationHub>("/hubs/notifications");
+        // Auto-migrate and seed
+        using (var scope = app.Services.CreateScope())
+        {
+            var logger = scope.ServiceProvider
+                .GetRequiredService<ILogger<Program>>();
+            try
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                logger.LogInformation("Applying migrations...");
+                await db.Database.MigrateAsync();
+                logger.LogInformation("Migrations applied.");
+
+                logger.LogInformation("Seeding data...");
+                await DataSeeder.SeedAsync(scope.ServiceProvider);
+                logger.LogInformation("Seeding complete.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "An error occurred during migration or seeding.");
+                throw; // re-throw so the app doesn't start with broken data
+            }
+        }
 
         app.Run();
     }
