@@ -16,14 +16,16 @@ public record CreateProfileRequest(
     DateOnly DateOfBirth,
     string? Bio,
     string? Gender,
-    string? Location);
+    string? City,
+    string? Country);
 
 public record UpdateProfileRequest(
     string? FirstName,
     string? LastName,
     string? Bio,
     string? Gender,
-    string? Location);
+    string? City,
+    string? Country);
 
 public record ProfileResponse(
     Guid Id,
@@ -33,7 +35,10 @@ public record ProfileResponse(
     DateOnly DateOfBirth,
     string? Bio,
     string? Gender,
-    string? Location,
+    string? City,
+    string? Country,
+    double? Latitude,
+    double? Longitude,
     AccountStatus Status,
     List<ProfileImageResponse> Images);
 
@@ -42,6 +47,31 @@ public record ProfileImageResponse(
     string BlobPath,
     bool IsPrimary,
     int SortOrder);
+
+// ── Discovery ───────────────────────────────────────────────────────────────────
+public record DiscoveryProfileResponse(
+    Guid Id,
+    string UserId,
+    string FirstName,
+    int Age,
+    string? Bio,
+    string? Gender,
+    string? City,
+    string? Country,
+    double? DistanceKm,        // null if either user has no coordinates
+    List<ProfileImageResponse> Images);
+
+// Called when user updates their location:
+public record LocationUpdateRequest(
+    string City,
+    string? Country);
+
+// Returned after geocoding:
+public record LocationUpdateResponse(
+    string City,
+    string Country,
+    double Latitude,
+    double Longitude);
 
 // ── Like ──────────────────────────────────────────────────────────────────────
 
@@ -119,5 +149,5 @@ public record AdminUserResponse(
     string LastName,
     DateOnly DateOfBirth,
     AccountStatus Status,
-    string? Location,
+    string? City,
     int ImageCount);

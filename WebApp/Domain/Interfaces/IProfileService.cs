@@ -7,7 +7,7 @@ namespace WebApp.Domain.Interfaces;
 public interface IProfileService
 {
     Task<UserProfile?> GetByUserIdAsync(string userId);
-    Task<UserProfile> CreateAsync(string userId, string firstName, string lastName, DateOnly dateOfBirth);
+    Task<UserProfile> CreateAsync(string userId, string firstName, string lastName, DateOnly dateOfBirth, string? city = null, string? country =null);
     Task UpdateAsync(UserProfile profile);
     Task<AccountStatus> GetStatusAsync(string userId);
 
@@ -18,5 +18,10 @@ public interface IProfileService
     Task SetPrimaryImageAsync(Guid imageId, string requestingUserId);
 
     // Discovery feed — approved users only, excluding blocks/dislikes (FR-17)
-    Task<IEnumerable<UserProfile>> GetDiscoveryFeedAsync(string requestingUserId, int skip, int take);
+    Task<IEnumerable<(UserProfile Profile, double? DistanceKm)>> GetDiscoveryFeedAsync(
+        string? requestingUserId, 
+        int skip, 
+        int take, 
+        double? maxDistanceKm = null, 
+        string? cityFilter = null);
 }

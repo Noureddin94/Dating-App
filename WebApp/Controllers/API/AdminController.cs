@@ -26,7 +26,7 @@ public class AdminController(
                 p.LastName,
                 p.DateOfBirth,
                 p.Status,
-                p.Location,
+                p.City,
                 p.ProfileImages.Count)));
         }
         catch (Exception ex) { return HandleException(ex); }
@@ -47,7 +47,7 @@ public class AdminController(
                 profile.LastName,
                 profile.DateOfBirth,
                 profile.Status,
-                profile.Location,
+                profile.City,
                 profile.ProfileImages.Count));
         }
         catch (Exception ex) { return HandleException(ex); }

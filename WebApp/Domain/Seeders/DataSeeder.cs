@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using WebApp.Domain.Entities;
 using WebApp.Domain.Enums;
+using WebApp.Domain.Interfaces;
 using WebApp.Infrastructure.Infrastructure.Data;
 
 namespace WebApp.Domain.Seeders;
@@ -11,14 +12,14 @@ public static class DataSeeder
     {
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = services.GetRequiredService<UserManager<IdentityUser>>();
-        var context     = services.GetRequiredService<AppDbContext>();
+        var context = services.GetRequiredService<AppDbContext>();
+        var randomUserService = services.GetRequiredService<IRandomUserService>();
+        var logger = services.GetRequiredService<ILogger<Program>>();
 
         await SeedRolesAsync(roleManager);
         await SeedAdminAsync(userManager, context);
-        await SeedFakeUsersAsync(userManager, context);
+        await SeedFakeUsersAsync(userManager, context, randomUserService, logger);
     }
-
-    // ── Roles ─────────────────────────────────────────────────────────────────
 
     private static async Task SeedRolesAsync(RoleManager<IdentityRole> roleManager)
     {
@@ -27,98 +28,129 @@ public static class DataSeeder
                 await roleManager.CreateAsync(new IdentityRole(role));
     }
 
-    // ── Admin user ────────────────────────────────────────────────────────────
-
     private static async Task SeedAdminAsync(
-        UserManager<IdentityUser> userManager,
-        AppDbContext context)
+        UserManager<IdentityUser> userManager, AppDbContext context)
     {
-        const string adminEmail    = "admin@datingapp.nl";
-        const string adminPassword = "Admin@1234!";
+        const string email = "admin@datingapp.nl";
+        if (await userManager.FindByEmailAsync(email) is not null) return;
 
-        if (await userManager.FindByEmailAsync(adminEmail) is not null)
-            return;
-
-        var admin = new IdentityUser
-        {
-            UserName       = adminEmail,
-            Email          = adminEmail,
-            EmailConfirmed = true
-        };
-
-        var result = await userManager.CreateAsync(admin, adminPassword);
+        var admin = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
+        var result = await userManager.CreateAsync(admin, "Admin@1234!");
         if (!result.Succeeded)
             throw new Exception($"Failed to seed admin: {string.Join(", ", result.Errors.Select(e => e.Description))}");
 
         await userManager.AddToRoleAsync(admin, "Admin");
-
         context.UserProfiles.Add(new UserProfile
         {
-            UserId      = admin.Id,
-            FirstName   = "App",
-            LastName    = "Admin",
+            UserId = admin.Id,
+            FirstName = "App",
+            LastName = "Admin",
             DateOfBirth = new DateOnly(1990, 1, 1),
-            Bio         = "Platform administrator",
-            Status      = AccountStatus.Approved
+            Bio = "Platform administrator",
+            City = "Amsterdam",
+            Country = "Netherlands",
+            Latitude = 52.3676,
+            Longitude = 4.9041,
+            Status = AccountStatus.Approved
         });
-
         await context.SaveChangesAsync();
     }
-
-    // ── Fake approved users ───────────────────────────────────────────────────
 
     private static async Task SeedFakeUsersAsync(
         UserManager<IdentityUser> userManager,
-        AppDbContext context)
+        AppDbContext context,
+        IRandomUserService randomUserService,
+        ILogger logger)
     {
-        var fakeUsers = new[]
+        var existingApproved = context.UserProfiles.Count(p => p.Status == AccountStatus.Approved);
+        if (existingApproved > 1)
         {
-            new FakeSeed("emma@datingapp.nl",   "Emma",   "Bakker",    new DateOnly(1995, 3, 14), "Female", "Amsterdam",  "Coffee lover, avid reader and weekend hiker."),
-            new FakeSeed("liam@datingapp.nl",   "Liam",   "de Vries",  new DateOnly(1993, 7, 22), "Male",   "Rotterdam",  "Tech enthusiast, football fan, amateur chef."),
-            new FakeSeed("sofia@datingapp.nl",  "Sofia",  "Jansen",    new DateOnly(1997, 11, 5), "Female", "Utrecht",    "Artist, cat person and hopeless romantic."),
-            new FakeSeed("noah@datingapp.nl",   "Noah",   "Smit",      new DateOnly(1991, 5, 30), "Male",   "The Hague",  "Cyclist, bookworm, terrible at cooking.")
-        };
+            logger.LogInformation("Skipping fake user seeding � {Count} approved users already exist.", existingApproved);
+            return;
+        }
 
-        foreach (var seed in fakeUsers)
+        logger.LogInformation("Fetching 4 random users from randomuser.me...");
+        var generatedUsers = await randomUserService.GetRandomUsersAsync(count: 4, nationality: "NL");
+
+        if (!generatedUsers.Any())
         {
-            if (await userManager.FindByEmailAsync(seed.Email) is not null)
-                continue;
+            logger.LogWarning("randomuser.me unreachable � falling back to hardcoded seed users.");
+            await SeedFallbackUsersAsync(userManager, context);
+            return;
+        }
 
-            var user = new IdentityUser
-            {
-                UserName       = seed.Email,
-                Email          = seed.Email,
-                EmailConfirmed = true
-            };
+        foreach (var generated in generatedUsers)
+        {
+            if (await userManager.FindByEmailAsync(generated.Email) is not null) continue;
 
+            var user = new IdentityUser { UserName = generated.Email, Email = generated.Email, EmailConfirmed = true };
             var result = await userManager.CreateAsync(user, "User@1234!");
-            if (!result.Succeeded)
-                throw new Exception($"Failed to seed {seed.Email}: {string.Join(", ", result.Errors.Select(e => e.Description))}");
+            if (!result.Succeeded) { logger.LogWarning("Failed to seed {Email}", generated.Email); continue; }
 
             await userManager.AddToRoleAsync(user, "ApprovedUser");
 
-            context.UserProfiles.Add(new UserProfile
+            var profile = new UserProfile
             {
-                UserId      = user.Id,
-                FirstName   = seed.FirstName,
-                LastName    = seed.LastName,
-                DateOfBirth = seed.DateOfBirth,
-                Gender      = seed.Gender,
-                Location    = seed.Location,
-                Bio         = seed.Bio,
-                Status      = AccountStatus.Approved
-            });
-        }
+                UserId = user.Id,
+                FirstName = generated.FirstName,
+                LastName = generated.LastName,
+                DateOfBirth = generated.DateOfBirth,
+                Gender = generated.Gender,
+                City = generated.City,
+                Country = generated.Country,
+                Latitude = generated.Latitude,
+                Longitude = generated.Longitude,
+                Bio = $"Hi, I'm {generated.FirstName}! I'm from {generated.City}.",
+                Status = AccountStatus.Approved
+            };
+            context.UserProfiles.Add(profile);
+            await context.SaveChangesAsync();
 
-        await context.SaveChangesAsync();
+            context.ProfileImages.Add(new ProfileImage
+            {
+                UserId = user.Id,
+                BlobPath = generated.PictureUrl,
+                IsPrimary = true,
+                SortOrder = 0
+            });
+            await context.SaveChangesAsync();
+
+            logger.LogInformation("Seeded {Name} from {City}", $"{generated.FirstName} {generated.LastName}", generated.City);
+        }
     }
 
-    private record FakeSeed(
-        string Email,
-        string FirstName,
-        string LastName,
-        DateOnly DateOfBirth,
-        string Gender,
-        string Location,
-        string Bio);
+    private static async Task SeedFallbackUsersAsync(
+        UserManager<IdentityUser> userManager, AppDbContext context)
+    {
+        var fallback = new[]
+        {
+            ("emma@datingapp.nl",  "Emma",  "Bakker",   new DateOnly(1995, 3, 14), "Female", "Amsterdam", "Netherlands", 52.3676, 4.9041),
+            ("liam@datingapp.nl",  "Liam",  "de Vries", new DateOnly(1993, 7, 22), "Male",   "Rotterdam", "Netherlands", 51.9225, 4.4792),
+            ("sofia@datingapp.nl", "Sofia", "Jansen",   new DateOnly(1997, 11, 5), "Female", "Utrecht",   "Netherlands", 52.0907, 5.1214),
+            ("noah@datingapp.nl",  "Noah",  "Smit",     new DateOnly(1991, 5, 30), "Male",   "The Hague", "Netherlands", 52.0705, 4.3007)
+        };
+        foreach (var (email, first, last, dob, gender, city, country, lat, lon) in fallback)
+        {
+            if (await userManager.FindByEmailAsync(email) is not null) continue;
+            var user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
+            var result = await userManager.CreateAsync(user, "User@1234!");
+            if (!result.Succeeded) continue;
+            await userManager.AddToRoleAsync(user, "ApprovedUser");
+            context.UserProfiles.Add(new UserProfile
+            {
+                UserId = user.Id,
+                FirstName = first,
+                LastName = last,
+                DateOfBirth = dob,
+                Gender = gender,
+                City = city,
+                Country = country,
+                Latitude = lat,
+                Longitude = lon,
+                Bio = $"Hi, I'm {first} from {city}.",
+                Status = AccountStatus.Approved
+            });
+            await context.SaveChangesAsync();
+        }
+    }
 }
