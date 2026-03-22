@@ -12,7 +12,14 @@ namespace WebApp.Domain.Entities
         public DateOnly DateOfBirth { get; set; }
         public string? Bio { get; set; }
         public string? Gender { get; set; }
-        public string? Location { get; set; }
+        public string? City { get; set; }
+        public string? Country { get; set; }
+
+        /// <summary>GPS latitude — populated via geocoding when user sets their city.</summary>
+        public double? Latitude { get; set; }
+
+        /// <summary>GPS longitude — populated via geocoding when user sets their city.</summary>
+        public double? Longitude { get; set; }
         public AccountStatus Status { get; set; } = AccountStatus.Pending;
 
         public IdentityUser User { get; set; } = null!;

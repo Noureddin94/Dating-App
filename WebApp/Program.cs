@@ -115,6 +115,24 @@ public class Program
                 policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
         });
 
+        // ── Location Service ─────────────────────────────────────────────────────
+        builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
+        {
+            client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+            // Nominatim requires a User-Agent header identifying your app — OSM policy
+            client.DefaultRequestHeaders.Add("User-Agent", "LoveMatchApp/1.0");
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+        });
+
+        // ── Random User Service ─────────────────────────────────────────────────────
+        builder.Services.AddHttpClient<IRandomUserService, RandomUserService>(client =>
+        {
+            client.BaseAddress = new Uri("https://randomuser.me/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+        });
+
         var app = builder.Build();
         Console.WriteLine($">>> Using connection: {app.Configuration.GetConnectionString("DefaultConnection")}");
 

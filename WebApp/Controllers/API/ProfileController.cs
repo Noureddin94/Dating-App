@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Linq;
 using WebApp.Domain.Entities;
 using WebApp.Domain.Interfaces;
 using WebApp.Presentation.DTOs;
@@ -19,7 +20,8 @@ public class ProfileController(IProfileService profileService) : BaseApiControll
             if (profile is null)
                 return NotFound(new { error = "Profile not found. Please complete registration." });
 
-            return Ok(MapToResponse(profile));
+            var images = await profileService.GetImagesAsync(CurrentUserId);
+            return Ok(MapToResponse(profile, images));
         }
         catch (Exception ex) { return HandleException(ex); }
     }
@@ -32,7 +34,9 @@ public class ProfileController(IProfileService profileService) : BaseApiControll
         {
             var profile = await profileService.GetByUserIdAsync(userId);
             if (profile is null) return NotFound(new { error = "Profile not found." });
-            return Ok(MapToResponse(profile));
+
+            var images = await profileService.GetImagesAsync(userId);
+            return Ok(MapToResponse(profile, images));
         }
         catch (Exception ex) { return HandleException(ex); }
     }
@@ -51,15 +55,17 @@ public class ProfileController(IProfileService profileService) : BaseApiControll
                 CurrentUserId,
                 request.FirstName,
                 request.LastName,
-                request.DateOfBirth);
+                request.DateOfBirth,
+                request.City,
+                request.Country);
 
-            if (request.Bio is not null)       profile.Bio = request.Bio;
-            if (request.Gender is not null)    profile.Gender = request.Gender;
-            if (request.Location is not null)  profile.Location = request.Location;
-
+            if (request.Bio is not null) profile.Bio = request.Bio;
+            if (request.Gender is not null) profile.Gender = request.Gender;
+            
             await profileService.UpdateAsync(profile);
 
-            return CreatedAtAction(nameof(GetMyProfile), MapToResponse(profile));
+            var images = await profileService.GetImagesAsync(CurrentUserId);
+            return CreatedAtAction(nameof(GetMyProfile), MapToResponse(profile, images));
         }
         catch (Exception ex) { return HandleException(ex); }
     }
@@ -73,14 +79,17 @@ public class ProfileController(IProfileService profileService) : BaseApiControll
             var profile = await profileService.GetByUserIdAsync(CurrentUserId)
                 ?? throw new KeyNotFoundException("Profile not found.");
 
-            if (request.FirstName is not null)  profile.FirstName = request.FirstName;
-            if (request.LastName is not null)   profile.LastName = request.LastName;
-            if (request.Bio is not null)        profile.Bio = request.Bio;
-            if (request.Gender is not null)     profile.Gender = request.Gender;
-            if (request.Location is not null)   profile.Location = request.Location;
+            if (request.FirstName is not null) profile.FirstName = request.FirstName;
+            if (request.LastName is not null) profile.LastName = request.LastName;
+            if (request.Bio is not null) profile.Bio = request.Bio;
+            if (request.Gender is not null) profile.Gender = request.Gender;
+            if (request.City is not null) profile.City = request.City;
+            if (request.Country is not null) profile.Country = request.Country;
 
             await profileService.UpdateAsync(profile);
-            return Ok(MapToResponse(profile));
+
+            var images = await profileService.GetImagesAsync(CurrentUserId);
+            return Ok(MapToResponse(profile, images));
         }
         catch (Exception ex) { return HandleException(ex); }
     }
@@ -133,12 +142,15 @@ public class ProfileController(IProfileService profileService) : BaseApiControll
 
     // GET api/profile/discovery?skip=0&take=10
     [HttpGet("discovery")]
-    public async Task<IActionResult> GetDiscoveryFeed([FromQuery] int skip = 0, [FromQuery] int take = 10)
+    public async Task<IActionResult> GetDiscoveryFeed(
+        [FromQuery] int skip = 0, [FromQuery] int take = 10,
+        [FromQuery] double? maxDistanceKm = null, [FromQuery] string? cityFilter = null)
     {
         try
         {
-            var profiles = await profileService.GetDiscoveryFeedAsync(CurrentUserId, skip, take);
-            return Ok(profiles.Select(MapToResponse));
+            var results = await profileService.GetDiscoveryFeedAsync(
+                CurrentUserId, skip, take, maxDistanceKm, cityFilter);
+            return Ok(await MapToDiscoveryResponses(results));
         }
         catch (Exception ex) { return HandleException(ex); }
     }
@@ -154,24 +166,36 @@ public class ProfileController(IProfileService profileService) : BaseApiControll
         {
             // Pass null as userId — ProfileService returns approved profiles
             // but has no user context to exclude acted-on profiles
-            var profiles = await profileService.GetDiscoveryFeedAsync(null!, skip, take);
-            return Ok(profiles.Select(MapToResponse));
+            var results = await profileService.GetDiscoveryFeedAsync(null!, skip, take);
+            return Ok(await MapToDiscoveryResponses(results));
         }
         catch (Exception ex) { return HandleException(ex); }
     }
 
     // ── Mapper ────────────────────────────────────────────────────────────────
 
-    private static ProfileResponse MapToResponse(UserProfile p) => new(
-        p.Id,
-        p.UserId,
-        p.FirstName,
-        p.LastName,
-        p.DateOfBirth,
-        p.Bio,
-        p.Gender,
-        p.Location,
-        p.Status,
-        p.ProfileImages.Select(i =>
+    private static ProfileResponse MapToResponse(
+        UserProfile p, IEnumerable<ProfileImage> images) => new(
+        p.Id, p.UserId, p.FirstName, p.LastName, p.DateOfBirth,
+        p.Bio, p.Gender, p.City, p.Country, p.Latitude, p.Longitude, p.Status,
+        images.Select(i =>
             new ProfileImageResponse(i.Id, i.BlobPath, i.IsPrimary, i.SortOrder)).ToList());
+
+    private async Task<List<DiscoveryProfileResponse>> MapToDiscoveryResponses(
+        IEnumerable<(WebApp.Domain.Entities.UserProfile Profile, double? DistanceKm)> results)
+    {
+        var response = new List<DiscoveryProfileResponse>();
+        foreach (var (profile, distanceKm) in results)
+        {
+            var images = await profileService.GetImagesAsync(profile.UserId);
+            var age = DateTime.Today.Year - profile.DateOfBirth.Year;
+            response.Add(new DiscoveryProfileResponse(
+                profile.Id, profile.UserId, profile.FirstName, age,
+                profile.Bio, profile.Gender, profile.City, profile.Country,
+                distanceKm.HasValue ? Math.Round(distanceKm.Value, 1) : null,
+                images.Select(i =>
+                    new ProfileImageResponse(i.Id, i.BlobPath, i.IsPrimary, i.SortOrder)).ToList()));
+        }
+        return response;
+    }
 }
