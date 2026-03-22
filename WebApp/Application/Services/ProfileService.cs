@@ -114,28 +114,31 @@ public class ProfileService(AppDbContext context) : IProfileService
     // ── Discovery feed ────────────────────────────────────────────────────────
 
     public async Task<IEnumerable<UserProfile>> GetDiscoveryFeedAsync(
-        string requestingUserId, int skip, int take)
+    string? requestingUserId, int skip, int take)
     {
-        // Users already acted on (liked or disliked)
-        var actedOn = await context.Likes
-            .Where(l => l.SenderId == requestingUserId)
-            .Select(l => l.ReceiverId)
-            .ToListAsync();
+        var excluded = new HashSet<string>();
 
-        // Users who blocked the requester or were blocked by the requester
-        var blocked = await context.Blocks
-            .Where(b => b.BlockerId == requestingUserId || b.BlockedId == requestingUserId)
-            .Select(b => b.BlockerId == requestingUserId ? b.BlockedId : b.BlockerId)
-            .ToListAsync();
+        if (requestingUserId is not null)
+        {
+            var actedOn = await context.Likes
+                .Where(l => l.SenderId == requestingUserId)
+                .Select(l => l.ReceiverId).ToListAsync();
 
-        var excluded = actedOn.Union(blocked).Append(requestingUserId).ToHashSet();
+            var blocked = await context.Blocks
+                .Where(b => b.BlockerId == requestingUserId || b.BlockedId == requestingUserId)
+                .Select(b => b.BlockerId == requestingUserId ? b.BlockedId : b.BlockerId)
+                .ToListAsync();
+
+            excluded = actedOn.Union(blocked).Append(requestingUserId).ToHashSet();
+        }
 
         return await context.UserProfiles
             .Include(p => p.ProfileImages)
             .Where(p => p.Status == AccountStatus.Approved && !excluded.Contains(p.UserId))
-            .OrderBy(_ => Guid.NewGuid()) // simple random ordering
+            .OrderBy(_ => Guid.NewGuid())
             .Skip(skip)
             .Take(take)
             .ToListAsync();
     }
+
 }

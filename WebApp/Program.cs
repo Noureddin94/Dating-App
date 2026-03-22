@@ -104,7 +104,7 @@ public class Program
                 Version = "v1",
                 Title = "Dating App API",
                 Description = "ASP.NET Core 9 Web API",
-                Contact = new OpenApiContact { Name = "Dev", Email = "dev@example.nl" }
+                Contact = new OpenApiContact { Name = "Dev", Email = "Nourkeswane2010@msn.com" }
             });
         });
 

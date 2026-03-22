@@ -143,6 +143,23 @@ public class ProfileController(IProfileService profileService) : BaseApiControll
         catch (Exception ex) { return HandleException(ex); }
     }
 
+    // GET api/profile/guest/discovery?skip=0&take=10
+    // No [Authorize] — guests can call this freely
+    [AllowAnonymous]
+    [HttpGet("guest/discovery")]
+    public async Task<IActionResult> GetGuestDiscoveryFeed(
+        [FromQuery] int skip = 0, [FromQuery] int take = 10)
+    {
+        try
+        {
+            // Pass null as userId — ProfileService returns approved profiles
+            // but has no user context to exclude acted-on profiles
+            var profiles = await profileService.GetDiscoveryFeedAsync(null!, skip, take);
+            return Ok(profiles.Select(MapToResponse));
+        }
+        catch (Exception ex) { return HandleException(ex); }
+    }
+
     // ── Mapper ────────────────────────────────────────────────────────────────
 
     private static ProfileResponse MapToResponse(UserProfile p) => new(
