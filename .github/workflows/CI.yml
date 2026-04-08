@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  # ── Job 1: Build & Test ────────────────────────────────────────────────────
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ./WebApp/WebApp.csproj
+
+      - name: Build
+        run: dotnet build ./WebApp/WebApp.csproj --no-restore --configuration Release
+
+      - name: Run tests
+        run: dotnet test ./WebApp/WebApp.csproj --no-build --configuration Release --verbosity normal
+        continue-on-error: true  # won't fail the pipeline if no tests exist yet
+
+  # ── Job 2: Code style (dotnet format) ─────────────────────────────────────
+  format:
+    name: Code style check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ./WebApp/WebApp.csproj
+
+      - name: Check formatting
+        run: dotnet format ./WebApp/WebApp.csproj --verify-no-changes --verbosity diagnostic
+        continue-on-error: true  # advisory only — reports issues without blocking merge
+
+  # ── Job 3: Docker build check ──────────────────────────────────────────────
+  docker:
+    name: Docker build check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build ./WebApp --file ./WebApp/Dockerfile --tag lovematch:ci-test
+
+      - name: Verify image was created
+        run: docker image inspect lovematch:ci-test
