@@ -182,7 +182,7 @@ public class ProfileController(IProfileService profileService) : BaseApiControll
             new ProfileImageResponse(i.Id, i.BlobPath, i.IsPrimary, i.SortOrder)).ToList());
 
     private async Task<List<DiscoveryProfileResponse>> MapToDiscoveryResponses(
-        IEnumerable<(WebApp.Domain.Entities.UserProfile Profile, double? DistanceKm)> results)
+        IEnumerable<(UserProfile Profile, double? DistanceKm)> results)
     {
         var response = new List<DiscoveryProfileResponse>();
         foreach (var (profile, distanceKm) in results)
